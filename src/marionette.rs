@@ -120,12 +120,14 @@ lazy_static! {
 }
 
 pub fn extension_routes() -> Vec<(Method, &'static str, GeckoExtensionRoute)> {
-    return vec![(Method::Get, "/session/{sessionId}/moz/context", GeckoExtensionRoute::GetContext),
+    return vec![(Method::Get, "/status", GeckoExtensionRoute::Status),
+                (Method::Get, "/session/{sessionId}/moz/context", GeckoExtensionRoute::GetContext),
                 (Method::Post, "/session/{sessionId}/moz/context", GeckoExtensionRoute::SetContext)]
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum GeckoExtensionRoute {
+    Status,
     GetContext,
     SetContext
 }
@@ -137,6 +139,9 @@ impl WebDriverExtensionRoute for GeckoExtensionRoute {
                _captures: &Captures,
                body_data: &Json) -> WebDriverResult<WebDriverCommand<GeckoExtensionCommand>> {
         let command = match self {
+            &GeckoExtensionRoute::Status => {
+                GeckoExtensionCommand::Status
+            }
             &GeckoExtensionRoute::GetContext => {
                 GeckoExtensionCommand::GetContext
             }
@@ -151,6 +156,7 @@ impl WebDriverExtensionRoute for GeckoExtensionRoute {
 
 #[derive(Clone, PartialEq)]
 pub enum GeckoExtensionCommand {
+    Status,
     GetContext,
     SetContext(GeckoContextParameters),
 }
@@ -158,6 +164,7 @@ pub enum GeckoExtensionCommand {
 impl WebDriverExtensionCommand for GeckoExtensionCommand {
     fn parameters_json(&self) -> Option<Json> {
         match self {
+            &GeckoExtensionCommand::Status => None,
             &GeckoExtensionCommand::GetContext => None,
             &GeckoExtensionCommand::SetContext(ref x) => Some(x.to_json()),
         }
@@ -687,6 +694,12 @@ impl MarionetteSession {
             },
             Extension(ref extension) => {
                 match extension {
+                    &GeckoExtensionCommand::Status => {
+                        let mut data = BTreeMap::new();
+                        data.insert("status".to_owned(), Json::I64(0));
+                        let value = Json::Object(data);
+                        WebDriverResponse::Generic(ValueResponse::new(value.clone()))
+                    }
                     &GeckoExtensionCommand::GetContext => {
                         let value = try_opt!(resp.result.find("value"),
                                              ErrorStatus::UnknownError,
@@ -896,6 +909,7 @@ impl MarionetteCommand {
             },
             Extension(ref extension) => {
                 match extension {
+                    &GeckoExtensionCommand::Status => (None, None),
                     &GeckoExtensionCommand::GetContext => (Some("getContext"), None),
                     &GeckoExtensionCommand::SetContext(ref x) => {
                         (Some("setContext"), Some(x.to_marionette()))
